@@ -33,6 +33,8 @@ yall should try coding while listening to ren ren ai ai circu circu lation latio
 #include <unistd.h>
 #include <sys/select.h>
 #include <time.h>
+#include <termios.h>
+#include <fcntl.h>
 #endif
 #include <math.h>
 
@@ -45,7 +47,7 @@ typedef struct Piece
 {
     int y, x;
 
-    unsigned int rotation;
+    int rotation;
 
     bool rotations[4][PIECE_HEIGHT][PIECE_WIDTH];
 } Piece;
@@ -72,11 +74,11 @@ void clear()
 
 void draw(Game game)
 {
-    unsigned int y, x;
+    int y, x;
 
     clear();
 
-    printf("########################   score: %u   wasd or hjkl\n", game.score);
+    printf("########################   score: %u\n", game.score);
 
     for (y = 0; y < BOARD_HEIGHT; y++)
     {
@@ -91,7 +93,21 @@ void draw(Game game)
                       : " .",
                   stdout);
         }
-        puts("##");
+        fputs("##", stdout);
+        switch (y)
+        {
+        case 0:
+            puts("   wasd or hjkl");
+            break;
+        case 1:
+            puts("   <space> to hard drop");
+            break;
+        case 2:
+            puts("   q to quit");
+            break;
+        default:
+            puts("");
+        }
     }
 
     puts("########################");
@@ -100,45 +116,33 @@ void draw(Game game)
 // check if a line is made and if so clear and award points
 Game updateLines(Game game)
 {
-    unsigned int lines = 0;
-    unsigned int y, x;
+    int lines = 0;
+    int y, x;
 
+    // check for lines
     for (y = 0; y < BOARD_HEIGHT; y++)
     {
         bool isLine = true;
-        for (x = 0; x < BOARD_HEIGHT; x++)
-        {
+        for (x = 0; x < BOARD_WIDTH; x++)
             if (!game.board[y][x])
             {
                 isLine = false;
                 break;
             }
-        }
 
         if (isLine)
         {
             lines++;
             game.score += 10;
 
-            // clear line
-
-            bool newBoard[BOARD_WIDTH][BOARD_HEIGHT];
-            int offset = -1;
-            unsigned int newY;
-            for (newY = 1; newY < BOARD_HEIGHT; newY++)
-            {
-                if (newY == y)
-                {
-                    offset++;
-                }
-
+            // shift lines above down
+            int copyY;
+            for (copyY = y; copyY > 0; copyY--)
                 for (x = 0; x < BOARD_WIDTH; x++)
-                    newBoard[y][x] = game.board[y + offset][x];
-            }
+                    game.board[copyY][x] = game.board[copyY - 1][x];
 
-            Game newGame = {.score = game.score, .piece = game.piece, .board = newBoard};
-
-            game = newGame;
+            for (x = 0; x < BOARD_WIDTH; x++)
+                game.board[0][x] = false;
         }
     }
 
@@ -158,19 +162,17 @@ Game updateLines(Game game)
     return game;
 }
 
-// check if a piece overlaps with the board
+// check if a piece overlaps with the board/is out of bounds
 bool pieceCollides(Piece piece, bool board[BOARD_HEIGHT][BOARD_WIDTH])
 {
-    unsigned int y, x;
+    int y, x;
     for (y = 0; y < PIECE_HEIGHT; y++)
-    {
         for (x = 0; x < PIECE_WIDTH; x++)
-        {
-            if (piece.rotations[piece.rotation][y][x] && piece.y + y >= BOARD_HEIGHT && (piece.x + x < 0 || piece.x + x >= BOARD_WIDTH || piece.y + y < 0 || board[piece.y + y][piece.x + x]))
+            if (piece.rotations[piece.rotation][y][x] && (piece.x + x < 0 ||
+                                                          piece.x + x >= BOARD_WIDTH ||
+                                                          piece.y + y >= BOARD_HEIGHT ||
+                                                          piece.y + y >= 0 && board[piece.y + y][piece.x + x]))
                 return true;
-        }
-    }
-
     return false;
 }
 
@@ -182,7 +184,11 @@ Piece newPiece()
     {
     case 0:
     {
-        Piece _piece = {.rotations = {{{}, {1, 1, 1, 1}}, {{0, 0, 1}, {0, 0, 1}, {0, 0, 1}, {0, 0, 1}}, {{}, {}, {1, 1, 1, 1}}, {{0, 1}, {0, 1}, {0, 1}, {0, 1}}}};
+        Piece _piece = {.rotations = {
+                            {{}, {1, 1, 1, 1}},
+                            {{0, 0, 1}, {0, 0, 1}, {0, 0, 1}, {0, 0, 1}},
+                            {{}, {}, {1, 1, 1, 1}},
+                            {{0, 1}, {0, 1}, {0, 1}, {0, 1}}}};
         piece = _piece;
         break;
     }
@@ -190,7 +196,64 @@ Piece newPiece()
     {
         Piece _piece = {.rotations = {
                             {{1}, {1, 1, 1}},
+                            {{0, 1, 1}, {0, 1}, {0, 1}},
+                            {{}, {1, 1, 1}, {0, 0, 1}},
+                            {{0, 1}, {0, 1}, {1, 1}}}};
+        piece = _piece;
+        break;
+    }
+    case 2:
+    {
+        Piece _piece = {.rotations = {
+                            {{0, 0, 1}, {1, 1, 1}},
+                            {{0, 1}, {0, 1}, {0, 1, 1}},
+                            {{}, {1, 1, 1}, {1}},
+                            {{1, 1}, {0, 1}, {0, 1}}}};
+        piece = _piece;
+        break;
+    }
+    case 3:
+    {
+        Piece _piece = {.rotations = {
+                            {{1, 1}, {1, 1}},
+                            {{1, 1}, {1, 1}},
+                            {{1, 1}, {1, 1}},
+                            {{1, 1}, {1, 1}},
                         }};
+        piece = _piece;
+        break;
+    }
+    case 4:
+    {
+        Piece _piece = {.rotations = {
+                            {{0, 1, 1}, {1, 1}},
+                            {{0, 1}, {0, 1, 1}, {0, 0, 1}},
+                            {{}, {0, 1, 1}, {1, 1}},
+                            {{1}, {1, 1}, {0, 1}},
+                        }};
+        piece = _piece;
+        break;
+    }
+    case 5:
+    {
+        Piece _piece = {.rotations = {
+                            {{0, 1}, {1, 1, 1}},
+                            {{0, 1}, {0, 1, 1}, {0, 1}},
+                            {{}, {1, 1, 1}, {0, 1}},
+                            {{0, 1}, {1, 1}, {0, 1}},
+                        }};
+        piece = _piece;
+        break;
+    }
+    case 6:
+    {
+        Piece _piece = {
+            .rotations = {
+                {{1, 1}, {0, 1, 1}},
+                {{0, 0, 1}, {0, 1, 1}, {0, 1}},
+                {{}, {1, 1}, {0, 1, 1}},
+                {{0, 1}, {1, 1}, {1}}},
+        };
         piece = _piece;
         break;
     }
@@ -198,8 +261,36 @@ Piece newPiece()
 
     piece.x = rand() % (BOARD_WIDTH - PIECE_WIDTH);
     piece.y = -4;
+    piece.rotation = rand() % 4;
 
     return piece;
+}
+
+Game stopPiece(Game game)
+{
+    int x;
+    int y;
+
+    // check for death
+    for (y = 0; y < PIECE_HEIGHT; y++)
+        for (x = 0; x < PIECE_WIDTH; x++)
+            if (game.piece.rotations[game.piece.rotation][y][x] && game.piece.y + y < 0)
+            {
+                game.alive = false;
+                return game;
+            }
+
+    // put the piece onto the board
+    for (y = 0; y < PIECE_HEIGHT; y++)
+        for (x = 0; x < PIECE_WIDTH; x++)
+            if (game.piece.rotations[game.piece.rotation][y][x])
+                game.board[game.piece.y + y][game.piece.x + x] = true;
+
+    game = updateLines(game);
+
+    game.piece = newPiece();
+
+    return game;
 }
 
 Game updatePiece(Game game)
@@ -210,28 +301,8 @@ Game updatePiece(Game game)
 
     if (should_stop)
     {
-        if (game.piece.y < 0)
-        {
-            game.alive = false;
-        }
-        else
-        {
-            unsigned int x;
-            unsigned int y;
-
-            game.piece.y--;
-            // put the piece onto the board
-            for (y = 0; y < PIECE_HEIGHT; y++)
-            {
-                for (x = 0; x < PIECE_WIDTH; x++)
-                {
-                    if (game.piece.rotations[game.piece.rotation][y][x])
-                        game.board[game.piece.y + y][game.piece.x + x] = true;
-                }
-            }
-
-            game = updateLines(game);
-        }
+        game.piece.y--;
+        game = stopPiece(game);
     }
 
     return game;
@@ -241,20 +312,40 @@ Game update(Game game)
 {
     game = updatePiece(game);
 
+    draw(game);
+
     return game;
 }
 
-int kbhit() {
-    struct timeval timeout;
-    fd_set rdset;
+#ifndef _WINDOWS
+// kbhit for linux so we can poll, thanks to this guy https://cboard.cprogramming.com/c-programming/63166-kbhit-linux-post449301.html#post449301
+int kbhit(void)
+{
+    struct termios oldt, newt;
+    int ch;
+    int oldf;
 
-    FD_ZERO(&rdset);
-    FD_SET(0, &rdset);
-    timeout.tv_sec  = 0;
-    timeout.tv_usec = 0;
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
 
-    return select(1, &rdset, NULL, NULL, &timeout);  
+    ch = getchar();
+
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    fcntl(STDIN_FILENO, F_SETFL, oldf);
+
+    if (ch != EOF)
+    {
+        ungetc(ch, stdin);
+        return 1;
+    }
+
+    return 0;
 }
+#endif
 
 Game updateInput(Game game)
 {
@@ -272,12 +363,43 @@ Game updateInput(Game game)
             game.piece.x--;
             if (pieceCollides(game.piece, game.board))
                 game.piece.x++;
+            else
+                draw(game);
             break;
         case 'd':
         case 'l':
             game.piece.x++;
             if (pieceCollides(game.piece, game.board))
                 game.piece.x--;
+            else
+                draw(game);
+            break;
+        case 's':
+        case 'j':
+            game = updatePiece(game);
+            draw(game);
+            break;
+        case 'w':
+        case 'k':
+        {
+            int lastRotation = game.piece.rotation;
+            game.piece.rotation = (game.piece.rotation + 1) % 4;
+            if (pieceCollides(game.piece, game.board))
+            {
+                game.piece.rotation = lastRotation;
+                int x = 0;
+            }
+            else
+                draw(game);
+            break;
+        }
+        case ' ':
+            do
+                game.piece.y++;
+            while (!pieceCollides(game.piece, game.board));
+
+            game.piece.y--;
+            game = stopPiece(game);
             break;
         }
     }
@@ -289,19 +411,22 @@ int main()
 {
     srand(time(0));
 
-    Game game = {.alive = true};
+    Game game = {.alive = true, .piece = newPiece()};
+
+    draw(game);
+
+    time_t lastUpdate = time(0) - 1;
 
     while (game.alive)
     {
         game = updateInput(game);
 
-        game = update(game);
+        time_t now = time(0);
 
-        draw(game);
-
-        if (!game.alive)
-            break;
-
-        sleep(1);
+        if (lastUpdate - now <= -1)
+        {
+            lastUpdate = now;
+            game = update(game);
+        }
     }
 }
