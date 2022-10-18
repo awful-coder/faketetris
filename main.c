@@ -23,9 +23,7 @@ yall should try coding while listening to ren ren ai ai circu circu lation latio
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-// if you dont use unix-like or windows you are a clown
 #ifdef _WINDOWS
-// actually if you use windows you are also a clown
 #include <dos.h>
 #include <conio.h>
 #include <winsock2.h>
@@ -55,7 +53,7 @@ typedef struct Piece
 typedef struct Game
 {
     unsigned int score;
-    // the active piece
+    /* the active piece */
     Piece piece;
 
     bool board[BOARD_HEIGHT][BOARD_WIDTH];
@@ -113,13 +111,13 @@ void draw(Game game)
     puts("########################");
 }
 
-// check if a line is made and if so clear and award points
+/* check if a line is made and if so clear and award points */
 Game updateLines(Game game)
 {
     int lines = 0;
     int y, x;
 
-    // check for lines
+    /* check for lines */
     for (y = 0; y < BOARD_HEIGHT; y++)
     {
         bool isLine = true;
@@ -135,7 +133,7 @@ Game updateLines(Game game)
             lines++;
             game.score += 10;
 
-            // shift lines above down
+            /* shift lines above down */
             int copyY;
             for (copyY = y; copyY > 0; copyY--)
                 for (x = 0; x < BOARD_WIDTH; x++)
@@ -162,7 +160,7 @@ Game updateLines(Game game)
     return game;
 }
 
-// check if a piece overlaps with the board/is out of bounds
+/* check if a piece overlaps with the board/is out of bounds */
 bool pieceCollides(Piece piece, bool board[BOARD_HEIGHT][BOARD_WIDTH])
 {
     int y, x;
@@ -271,7 +269,7 @@ Game stopPiece(Game game)
     int x;
     int y;
 
-    // check for death
+    /* check for death */
     for (y = 0; y < PIECE_HEIGHT; y++)
         for (x = 0; x < PIECE_WIDTH; x++)
             if (game.piece.rotations[game.piece.rotation][y][x] && game.piece.y + y < 0)
@@ -280,7 +278,7 @@ Game stopPiece(Game game)
                 return game;
             }
 
-    // put the piece onto the board
+    /* put the piece onto the board */
     for (y = 0; y < PIECE_HEIGHT; y++)
         for (x = 0; x < PIECE_WIDTH; x++)
             if (game.piece.rotations[game.piece.rotation][y][x])
@@ -295,7 +293,7 @@ Game stopPiece(Game game)
 
 Game updatePiece(Game game)
 {
-    // should the piece stop
+    /* should the piece stop */
     game.piece.y++;
     bool should_stop = pieceCollides(game.piece, game.board);
 
@@ -318,7 +316,7 @@ Game update(Game game)
 }
 
 #ifndef _WINDOWS
-// kbhit for linux so we can poll, thanks to this guy https://cboard.cprogramming.com/c-programming/63166-kbhit-linux-post449301.html#post449301
+/* kbhit for linux so we can poll, thanks to this guy https://cboard.cprogramming.com/c-programming/63166-kbhit-linux-post449301.html#post449301 */
 int kbhit(void)
 {
     struct termios oldt, newt;
