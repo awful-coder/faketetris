@@ -76,7 +76,7 @@ void draw(Game game)
 
     clear();
 
-    printf("########################   score: %u\n", game.score);
+    printf("########################   score: %u   wasd or hjkl\n", game.score);
 
     for (y = 0; y < BOARD_HEIGHT; y++)
     {
@@ -88,7 +88,7 @@ void draw(Game game)
                               x >= game.piece.x && x < game.piece.x + PIECE_WIDTH &&
                               game.piece.rotations[game.piece.rotation][y - game.piece.y][x - game.piece.x]
                       ? "[]"
-                      : "'.",
+                      : " .",
                   stdout);
         }
         puts("##");
@@ -244,26 +244,40 @@ Game update(Game game)
     return game;
 }
 
+int kbhit() {
+    struct timeval timeout;
+    fd_set rdset;
+
+    FD_ZERO(&rdset);
+    FD_SET(0, &rdset);
+    timeout.tv_sec  = 0;
+    timeout.tv_usec = 0;
+
+    return select(1, &rdset, NULL, NULL, &timeout);  
+}
+
 Game updateInput(Game game)
 {
-    static struct timeval tv;
-    static fd_set rfds;
-    FD_ZERO(&rfds);
-    FD_SET(0, &rfds);
-
-    if (select(1, &rfds, NULL, NULL, &tv))
+    while (kbhit())
     {
         char c = getchar();
-        if (feof(stdin))
-        {
-            game.alive = false;
-        }
 
         switch (c)
         {
+        case 'q':
+            game.alive = false;
+            break;
         case 'a':
         case 'h':
             game.piece.x--;
+            if (pieceCollides(game.piece, game.board))
+                game.piece.x++;
+            break;
+        case 'd':
+        case 'l':
+            game.piece.x++;
+            if (pieceCollides(game.piece, game.board))
+                game.piece.x--;
             break;
         }
     }
