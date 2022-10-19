@@ -1,25 +1,3 @@
-/*
-Clone of Tetris in C89.
-Copyright (c) 2022  Kyle Zhou. Mail improvements to <kyle.zhou26@ycdsbk12.ca> for the retro feel.
-
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-
-kevin please patch this for windows i did my best
-yall should try coding while listening to ren ren ai ai circu circu lation lation its surprisingly effective
-*/
-
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -70,9 +48,32 @@ void clear()
 #endif
 }
 
-void draw(Game game)
+/* check if a piece overlaps with the board/is out of bounds */
+bool pieceCollides(Piece piece, bool board[BOARD_HEIGHT][BOARD_WIDTH])
 {
     int y, x;
+    for (y = 0; y < PIECE_HEIGHT; y++)
+        for (x = 0; x < PIECE_WIDTH; x++)
+            if (piece.rotations[piece.rotation][y][x] && (piece.x + x < 0 ||
+                                                          piece.x + x >= BOARD_WIDTH ||
+                                                          piece.y + y >= BOARD_HEIGHT ||
+                                                          piece.y + y >= 0 && board[piece.y + y][piece.x + x]))
+                return true;
+    return false;
+}
+
+int ghostPieceY(Piece piece, bool board[BOARD_HEIGHT][BOARD_WIDTH])
+{
+    do
+        piece.y++;
+    while (!pieceCollides(piece, board));
+
+    return piece.y - 1;
+}
+
+void draw(Game game)
+{
+    int y, x, ghostY = ghostPieceY(game.piece, game.board);
 
     clear();
 
@@ -83,13 +84,29 @@ void draw(Game game)
         fputs("##", stdout);
         for (x = 0; x < BOARD_WIDTH; x++)
         {
-            fputs(game.board[y][x] ||
-                          y >= game.piece.y && y < game.piece.y + PIECE_HEIGHT &&
-                              x >= game.piece.x && x < game.piece.x + PIECE_WIDTH &&
-                              game.piece.rotations[game.piece.rotation][y - game.piece.y][x - game.piece.x]
-                      ? "[]"
-                      : " .",
-                  stdout);
+            if (game.board[y][x])
+            {
+                fputs("[]", stdout);
+            }
+            else if (x >= game.piece.x && x < game.piece.x + PIECE_WIDTH)
+            {
+                if (y >= game.piece.y && y < game.piece.y + PIECE_HEIGHT && game.piece.rotations[game.piece.rotation][y - game.piece.y][x - game.piece.x])
+                {
+                    fputs("()", stdout);
+                }
+                else if (y >= ghostY && y < ghostY + PIECE_HEIGHT && game.piece.rotations[game.piece.rotation][y - ghostY][x - game.piece.x])
+                {
+                    fputs("::", stdout);
+                }
+                else
+                {
+                    fputs(" .", stdout);
+                }
+            }
+            else
+            {
+                fputs(" .", stdout);
+            }
         }
         fputs("##", stdout);
         switch (y)
@@ -158,20 +175,6 @@ Game updateLines(Game game)
     }
 
     return game;
-}
-
-/* check if a piece overlaps with the board/is out of bounds */
-bool pieceCollides(Piece piece, bool board[BOARD_HEIGHT][BOARD_WIDTH])
-{
-    int y, x;
-    for (y = 0; y < PIECE_HEIGHT; y++)
-        for (x = 0; x < PIECE_WIDTH; x++)
-            if (piece.rotations[piece.rotation][y][x] && (piece.x + x < 0 ||
-                                                          piece.x + x >= BOARD_WIDTH ||
-                                                          piece.y + y >= BOARD_HEIGHT ||
-                                                          piece.y + y >= 0 && board[piece.y + y][piece.x + x]))
-                return true;
-    return false;
 }
 
 Piece newPiece()
@@ -382,22 +385,22 @@ Game updateInput(Game game)
         {
             int lastRotation = game.piece.rotation;
             game.piece.rotation = (game.piece.rotation + 1) % 4;
-            if (pieceCollides(game.piece, game.board))
+            if (pieceCollides(game.piece, game.board) &&
+                (game.piece.x += 1, pieceCollides(game.piece, game.board)) && /* wallkicks */
+                (game.piece.x -= 2, pieceCollides(game.piece, game.board)) &&
+                (game.piece.x += 1, true))
             {
                 game.piece.rotation = lastRotation;
-                int x = 0;
             }
             else
                 draw(game);
             break;
         }
         case ' ':
-            do
-                game.piece.y++;
-            while (!pieceCollides(game.piece, game.board));
-
-            game.piece.y--;
+            game.piece.y = ghostPieceY(game.piece, game.board);
             game = stopPiece(game);
+
+            draw(game);
             break;
         }
     }
