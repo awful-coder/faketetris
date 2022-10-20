@@ -37,6 +37,8 @@ typedef struct Game
     bool board[BOARD_HEIGHT][BOARD_WIDTH];
 
     bool alive;
+
+    time_t lastUnpaused;
 } Game;
 
 void clear()
@@ -79,51 +81,57 @@ void draw(Game game)
 
     printf("########################   score: %u\n", game.score);
 
-    for (y = 0; y < BOARD_HEIGHT; y++)
+    if (game.lastUnpaused == 0)
     {
-        fputs("##", stdout);
-        for (x = 0; x < BOARD_WIDTH; x++)
+        for (y = 0; y < BOARD_HEIGHT; y++)
+            puts("##                    ##");
+    }
+    else
+        for (y = 0; y < BOARD_HEIGHT; y++)
         {
-            if (game.board[y][x])
+            fputs("##", stdout);
+            for (x = 0; x < BOARD_WIDTH; x++)
             {
-                fputs("[]", stdout);
-            }
-            else if (x >= game.piece.x && x < game.piece.x + PIECE_WIDTH)
-            {
-                if (y >= game.piece.y && y < game.piece.y + PIECE_HEIGHT && game.piece.rotations[game.piece.rotation][y - game.piece.y][x - game.piece.x])
+                if (game.board[y][x])
                 {
-                    fputs("()", stdout);
+                    fputs("[]", stdout);
                 }
-                else if (y >= ghostY && y < ghostY + PIECE_HEIGHT && game.piece.rotations[game.piece.rotation][y - ghostY][x - game.piece.x])
+                else if (x >= game.piece.x && x < game.piece.x + PIECE_WIDTH)
                 {
-                    fputs("::", stdout);
+                    if (y >= game.piece.y && y < game.piece.y + PIECE_HEIGHT && game.piece.rotations[game.piece.rotation][y - game.piece.y][x - game.piece.x])
+                    {
+                        fputs("()", stdout);
+                    }
+                    else if (y >= ghostY && y < ghostY + PIECE_HEIGHT && game.piece.rotations[game.piece.rotation][y - ghostY][x - game.piece.x])
+                    {
+                        fputs("::", stdout);
+                    }
+                    else
+                    {
+                        fputs(" .", stdout);
+                    }
                 }
                 else
                 {
                     fputs(" .", stdout);
                 }
             }
-            else
+            fputs("##", stdout);
+            switch (y)
             {
-                fputs(" .", stdout);
+            case 0:
+                puts("   wasd or hjkl");
+                break;
+            case 1:
+                puts("   <space> to hard drop");
+                break;
+            case 2:
+                puts("   q to quit, p to pause");
+                break;
+            default:
+                puts("");
             }
         }
-        fputs("##", stdout);
-        switch (y)
-        {
-        case 0:
-            puts("   wasd or hjkl");
-            break;
-        case 1:
-            puts("   <space> to hard drop");
-            break;
-        case 2:
-            puts("   q to quit");
-            break;
-        default:
-            puts("");
-        }
-    }
 
     puts("########################");
 }
@@ -386,9 +394,10 @@ Game updateInput(Game game)
             int lastRotation = game.piece.rotation;
             game.piece.rotation = (game.piece.rotation + 1) % 4;
             if (pieceCollides(game.piece, game.board) &&
-                (game.piece.x += 1, pieceCollides(game.piece, game.board)) && /* wallkicks */
+                (game.piece.x++, pieceCollides(game.piece, game.board)) && /* wallkicks */
                 (game.piece.x -= 2, pieceCollides(game.piece, game.board)) &&
-                (game.piece.x += 1, true))
+                (game.piece.x++, game.piece.y--, pieceCollides(game.piece, game.board)) &&
+                (game.piece.y++, true))
             {
                 game.piece.rotation = lastRotation;
             }
@@ -402,6 +411,17 @@ Game updateInput(Game game)
 
             draw(game);
             break;
+        case 'p':
+            if (game.lastUnpaused == 0)
+            {
+                game.lastUnpaused = time(0);
+                draw(game);
+            }
+            else if (game.lastUnpaused - time(0) < -5)
+            {
+                game.lastUnpaused = 0;
+                draw(game);
+            }
         }
     }
 
@@ -412,7 +432,7 @@ int main()
 {
     srand(time(0));
 
-    Game game = {.alive = true, .piece = newPiece()};
+    Game game = {.alive = true, .piece = newPiece(), .lastUnpaused = time(0)};
 
     draw(game);
 
@@ -424,7 +444,11 @@ int main()
 
         time_t now = time(0);
 
-        if (lastUpdate - now <= -1)
+        if (game.lastUnpaused == 0)
+        {
+            sleep(1);
+        }
+        else if (lastUpdate - now <= -1)
         {
             lastUpdate = now;
             game = update(game);
